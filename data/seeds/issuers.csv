@@ -1,0 +1,41 @@
+issuer_id,issuer_name,country_code,currency,network,is_active
+ISS0001,JPMorgan Chase,US,USD,Visa,true
+ISS0002,Bank of America,US,USD,Visa,true
+ISS0003,Wells Fargo,US,USD,Mastercard,true
+ISS0004,Citibank,US,USD,Visa,true
+ISS0005,Capital One,US,USD,Mastercard,true
+ISS0006,Barclays,GB,GBP,Visa,true
+ISS0007,HSBC,GB,GBP,Mastercard,true
+ISS0008,Lloyds Bank,GB,GBP,Visa,true
+ISS0009,NatWest,GB,GBP,Mastercard,true
+ISS0010,Deutsche Bank,DE,EUR,Visa,true
+ISS0011,Commerzbank,DE,EUR,Mastercard,true
+ISS0012,BNP Paribas,FR,EUR,Visa,true
+ISS0013,Société Générale,FR,EUR,Mastercard,true
+ISS0014,Crédit Agricole,FR,EUR,Visa,true
+ISS0015,Commonwealth Bank,AU,AUD,Visa,true
+ISS0016,ANZ,AU,AUD,Mastercard,true
+ISS0017,Westpac,AU,AUD,Visa,true
+ISS0018,NAB,AU,AUD,Mastercard,true
+ISS0019,Royal Bank of Canada,CA,CAD,Visa,true
+ISS0020,TD Bank,CA,CAD,Mastercard,true
+ISS0021,DBS Bank,SG,SGD,Visa,true
+ISS0022,OCBC,SG,SGD,Mastercard,true
+ISS0023,Mizuho,JP,JPY,Visa,true
+ISS0024,Sumitomo Mitsui,JP,JPY,Mastercard,true
+ISS0025,Bradesco,BR,BRL,Visa,true
+ISS0026,Itaú,BR,BRL,Mastercard,true
+ISS0027,HDFC Bank,IN,INR,Visa,true
+ISS0028,ICICI Bank,IN,INR,Mastercard,true
+ISS0029,Standard Bank,ZA,ZAR,Visa,true
+ISS0030,First National Bank,ZA,ZAR,Mastercard,true
+ISS0031,BBVA,MX,MXN,Visa,true
+ISS0032,Santander Mexico,MX,MXN,Mastercard,true
+ISS0033,Emirates NBD,AE,AED,Visa,true
+ISS0034,Abu Dhabi Commercial Bank,AE,AED,Mastercard,true
+ISS0035,ING,DE,EUR,Visa,true
+ISS0036,Rabobank,NL,EUR,Mastercard,true
+ISS0037,UniCredit,IT,EUR,Visa,true
+ISS0038,Intesa Sanpaolo,IT,EUR,Mastercard,true
+ISS0039,CaixaBank,ES,EUR,Visa,true
+ISS0040,Sabadell,ES,EUR,Mastercard,true

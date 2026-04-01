@@ -1,0 +1,36 @@
+FROM apache/spark:3.5.1-python3
+
+USER root
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    wget \
+    procps \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+COPY requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir \
+    pyspark==3.5.1 \
+    delta-spark==3.1.0 \
+    pydantic==2.6.4 \
+    numpy==1.26.4 \
+    pandas==2.2.1 \
+    python-dotenv==1.0.1 \
+    pyyaml==6.0.1 \
+    pyarrow==15.0.2 \
+    structlog==24.1.0 \
+    confluent-kafka==2.3.0 \
+    faker==24.3.0
+
+# Copy source code
+COPY src/ /opt/spark/work-dir/src/
+COPY config/ /opt/spark/work-dir/config/
+COPY data/seeds/ /opt/spark/work-dir/data/seeds/
+
+WORKDIR /opt/spark/work-dir
+
+ENV PYTHONPATH="/opt/spark/work-dir:${PYTHONPATH}"
+
+USER spark

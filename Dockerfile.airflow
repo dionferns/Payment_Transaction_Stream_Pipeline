@@ -1,0 +1,28 @@
+FROM apache/airflow:2.9.1-python3.11
+
+USER root
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    openjdk-17-jdk-headless \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+
+USER airflow
+
+RUN pip install --no-cache-dir \
+    apache-airflow-providers-apache-spark==4.8.0 \
+    apache-airflow-providers-slack==8.5.0 \
+    pyspark==3.5.1 \
+    pydantic==2.6.4 \
+    python-dotenv==1.0.1 \
+    pyyaml==6.0.1 \
+    structlog==24.1.0
+
+COPY --chown=airflow:root airflow/dags/ /opt/airflow/dags/
+COPY --chown=airflow:root airflow/plugins/ /opt/airflow/plugins/
+COPY --chown=airflow:root src/ /opt/airflow/src/
+COPY --chown=airflow:root config/ /opt/airflow/config/
+
+ENV PYTHONPATH="/opt/airflow:${PYTHONPATH}"

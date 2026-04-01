@@ -1,0 +1,153 @@
+# =============================================================================
+# Payment Stream Pipeline — Runtime Configuration
+# Secrets and environment-specific values live in .env, not here.
+# =============================================================================
+
+pipeline:
+  name: payment-stream-pipeline
+  version: "1.0.0"
+
+storage:
+  landing_zone_path: ${LANDING_ZONE_PATH:-./data/landing}
+  processed_zone_path: ${PROCESSED_ZONE_PATH:-./data/processed}
+  analytics_zone_path: ${ANALYTICS_ZONE_PATH:-./data/analytics}
+  quality_results_path: ${QUALITY_RESULTS_PATH:-./data/quality}
+  seeds_path: ${SEEDS_PATH:-./data/seeds}
+  # Parquet compression codec: snappy | gzip | zstd
+  compression: snappy
+  # Number of output partitions for batch writes — tune to data volume
+  batch_output_partitions: 8
+
+streaming:
+  trigger_interval_seconds: 30
+  checkpoint_base_path: ./data/checkpoints
+  watermark_delay_minutes: 10
+  output_mode: append
+
+aggregations:
+  merchant_volume_window_minutes: 5
+  issuer_cross_border_window_hours: 1
+
+fraud:
+  velocity_window_seconds: 60
+  velocity_max_transactions: 5
+  amount_anomaly_multiplier: 3.0
+  geo_impossibility_window_minutes: 30
+  # Minimum transactions before applying rolling-average anomaly rule
+  rolling_avg_min_samples: 3
+
+batch:
+  # Hour at which daily batch is considered "complete" (24h clock)
+  settlement_cutoff_hour: 23
+  # Merchants with chargeback ratio above this threshold are flagged
+  chargeback_ratio_threshold: 0.02
+  # Partitioning columns for processed zone
+  partition_by:
+    - date
+    - transaction_type
+
+data_quality:
+  # Maximum age (in hours) of the most recent transaction before a freshness
+  # alert is raised
+  freshness_max_age_hours: 2
+  # Critical null-check columns — any null triggers a FAIL result
+  required_non_null_columns:
+    - transaction_id
+    - amount
+    - timestamp
+    - card_hash
+    - merchant_id
+  # Valid transaction types
+  valid_transaction_types:
+    - purchase
+    - refund
+    - chargeback
+    - p2p
+  # Purchases must have amount > 0; refunds must have amount < 0
+  amount_range_rules:
+    purchase:
+      min: 0.01
+      max: 50000.00
+    refund:
+      min: -50000.00
+      max: -0.01
+    chargeback:
+      min: -50000.00
+      max: -0.01
+    p2p:
+      min: 0.01
+      max: 10000.00
+
+generator:
+  tps: ${GENERATOR_TPS:-1000}
+  duration_seconds: ${GENERATOR_DURATION_SECONDS:-3600}
+  batch_size: ${GENERATOR_BATCH_SIZE:-500}
+  output_mode: ${GENERATOR_OUTPUT_MODE:-file}   # file | kafka
+  # Timezone for generated timestamps
+  timezone: UTC
+
+  # Realistic throughput pattern (fraction of peak TPS per hour 0-23)
+  hourly_tps_distribution:
+    0: 0.15
+    1: 0.10
+    2: 0.08
+    3: 0.07
+    4: 0.08
+    5: 0.12
+    6: 0.30
+    7: 0.55
+    8: 0.80
+    9: 0.95
+    10: 1.00
+    11: 0.97
+    12: 0.90
+    13: 0.88
+    14: 0.85
+    15: 0.87
+    16: 0.90
+    17: 0.95
+    18: 0.85
+    19: 0.75
+    20: 0.65
+    21: 0.55
+    22: 0.40
+    23: 0.25
+
+  transaction_type_weights:
+    purchase: 0.82
+    refund: 0.10
+    chargeback: 0.03
+    p2p: 0.05
+
+  # Top-5 originating countries and approximate share of transaction volume
+  country_weights:
+    US: 0.35
+    GB: 0.12
+    DE: 0.08
+    AU: 0.07
+    CA: 0.06
+    FR: 0.06
+    SG: 0.05
+    JP: 0.05
+    BR: 0.04
+    IN: 0.04
+    ZA: 0.03
+    MX: 0.03
+    AE: 0.02
+
+  cross_border_rate: 0.18
+
+  currency_map:
+    US: USD
+    GB: GBP
+    DE: EUR
+    AU: AUD
+    CA: CAD
+    FR: EUR
+    SG: SGD
+    JP: JPY
+    BR: BRL
+    IN: INR
+    ZA: ZAR
+    MX: MXN
+    AE: AED

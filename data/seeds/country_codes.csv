@@ -1,0 +1,51 @@
+country_code,country_name,region,currency_code
+AE,United Arab Emirates,Middle East,AED
+AR,Argentina,Latin America,ARS
+AT,Austria,Europe,EUR
+AU,Australia,Asia Pacific,AUD
+BE,Belgium,Europe,EUR
+BR,Brazil,Latin America,BRL
+CA,Canada,North America,CAD
+CH,Switzerland,Europe,CHF
+CL,Chile,Latin America,CLP
+CN,China,Asia Pacific,CNY
+CO,Colombia,Latin America,COP
+DE,Germany,Europe,EUR
+DK,Denmark,Europe,DKK
+EG,Egypt,Africa,EGP
+ES,Spain,Europe,EUR
+FI,Finland,Europe,EUR
+FR,France,Europe,EUR
+GB,United Kingdom,Europe,GBP
+GH,Ghana,Africa,GHS
+HK,Hong Kong,Asia Pacific,HKD
+ID,Indonesia,Asia Pacific,IDR
+IE,Ireland,Europe,EUR
+IN,India,Asia Pacific,INR
+IT,Italy,Europe,EUR
+JP,Japan,Asia Pacific,JPY
+KE,Kenya,Africa,KES
+KR,South Korea,Asia Pacific,KRW
+MX,Mexico,Latin America,MXN
+MY,Malaysia,Asia Pacific,MYR
+NG,Nigeria,Africa,NGN
+NL,Netherlands,Europe,EUR
+NO,Norway,Europe,NOK
+NZ,New Zealand,Asia Pacific,NZD
+PE,Peru,Latin America,PEN
+PH,Philippines,Asia Pacific,PHP
+PK,Pakistan,Asia Pacific,PKR
+PL,Poland,Europe,PLN
+PT,Portugal,Europe,EUR
+RU,Russia,Europe,RUB
+SA,Saudi Arabia,Middle East,SAR
+SE,Sweden,Europe,SEK
+SG,Singapore,Asia Pacific,SGD
+TH,Thailand,Asia Pacific,THB
+TR,Turkey,Europe,TRY
+TW,Taiwan,Asia Pacific,TWD
+UA,Ukraine,Europe,UAH
+US,United States,North America,USD
+VN,Vietnam,Asia Pacific,VND
+ZA,South Africa,Africa,ZAR
+ZW,Zimbabwe,Africa,USD

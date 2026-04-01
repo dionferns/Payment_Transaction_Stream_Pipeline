@@ -1,0 +1,21 @@
+acquirer_id,acquirer_name,country_code,is_active
+ACQ0001,Fiserv,US,true
+ACQ0002,Worldpay,GB,true
+ACQ0003,Global Payments,US,true
+ACQ0004,Stripe,US,true
+ACQ0005,Chase Paymentech,US,true
+ACQ0006,Bambora,SE,true
+ACQ0007,Redsys,ES,true
+ACQ0008,Sony Payment Services,JP,true
+ACQ0009,Ingenico,FR,true
+ACQ0010,Tyro Payments,AU,true
+ACQ0011,Concardis,DE,true
+ACQ0012,Adyen,SG,true
+ACQ0013,Nets,DK,true
+ACQ0014,KG Inicis,KR,true
+ACQ0015,PayU,IN,true
+ACQ0016,PagSeguro,BR,true
+ACQ0017,Moneris,CA,true
+ACQ0018,Network International,AE,true
+ACQ0019,Elavon,US,true
+ACQ0020,Square,US,true

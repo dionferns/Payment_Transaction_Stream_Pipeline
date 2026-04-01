@@ -1,0 +1,41 @@
+merchant_id,merchant_name,merchant_category_code,country_code,acquirer_id,city,is_active
+MER0000001,Whole Foods Market,5411,US,ACQ0001,New York,true
+MER0000002,McDonald's,5812,US,ACQ0001,Chicago,true
+MER0000003,Shell,5541,GB,ACQ0002,London,true
+MER0000004,CVS Pharmacy,5912,US,ACQ0003,Boston,true
+MER0000005,Walmart,5310,US,ACQ0001,Dallas,true
+MER0000006,Amazon,5999,US,ACQ0004,Seattle,true
+MER0000007,TfL,4111,GB,ACQ0002,London,true
+MER0000008,Marriott,7011,US,ACQ0005,Miami,true
+MER0000009,Tiffany & Co,5944,US,ACQ0005,New York,true
+MER0000010,Apple Store,5734,US,ACQ0004,Cupertino,true
+MER0000011,Dell Technologies,5045,US,ACQ0003,Austin,true
+MER0000012,H&M,5651,SE,ACQ0006,Stockholm,true
+MER0000013,Zara,5661,ES,ACQ0007,Madrid,true
+MER0000014,IKEA,5200,SE,ACQ0006,Malmö,true
+MER0000015,Vodafone,4814,GB,ACQ0002,London,true
+MER0000016,Netflix,5815,US,ACQ0004,Los Gatos,true
+MER0000017,Blockbuster,7841,US,ACQ0003,Bend,false
+MER0000018,Costco,5300,US,ACQ0001,Issaquah,true
+MER0000019,Toyota,5511,JP,ACQ0008,Tokyo,true
+MER0000020,Marks & Spencer,5621,GB,ACQ0002,London,true
+MER0000021,Carrefour,5411,FR,ACQ0009,Paris,true
+MER0000022,Woolworths,5411,AU,ACQ0010,Sydney,true
+MER0000023,Aldi,5411,DE,ACQ0011,Essen,true
+MER0000024,Starbucks,5812,US,ACQ0001,Seattle,true
+MER0000025,Uber Eats,5812,US,ACQ0004,San Francisco,true
+MER0000026,BP,5541,AU,ACQ0010,Melbourne,true
+MER0000027,Singapore Airlines,4111,SG,ACQ0012,Singapore,true
+MER0000028,Hilton,7011,US,ACQ0005,McLean,true
+MER0000029,Pandora,5944,DK,ACQ0013,Copenhagen,true
+MER0000030,Samsung,5734,KR,ACQ0014,Seoul,true
+MER0000031,Flipkart,5999,IN,ACQ0015,Bangalore,true
+MER0000032,Mercado Libre,5999,BR,ACQ0016,São Paulo,true
+MER0000033,Shopify,5999,CA,ACQ0017,Ottawa,true
+MER0000034,Fnac,5734,FR,ACQ0009,Paris,true
+MER0000035,MediaMarkt,5734,DE,ACQ0011,Ingolstadt,true
+MER0000036,JD Sports,5661,GB,ACQ0002,Manchester,true
+MER0000037,Lowe's,5200,US,ACQ0001,Mooresville,true
+MER0000038,T-Mobile,4814,US,ACQ0003,Bellevue,true
+MER0000039,Spotify,5815,SE,ACQ0006,Stockholm,true
+MER0000040,Bunnings,5200,AU,ACQ0010,Melbourne,true
