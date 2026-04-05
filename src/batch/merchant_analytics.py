@@ -9,6 +9,14 @@ spark-submit::
     spark-submit \\
       --master spark://spark-master:7077 \\
       src/batch/merchant_analytics.py --date 2024-01-15
+
+SQL implementation
+------------------
+Both aggregations are now expressed as Spark SQL queries (``MCC_SPENDING_SQL``
+and ``MERCHANT_SUMMARY_SQL``).  Multiple ``.when()`` conditional expressions
+are replaced with SQL ``CASE WHEN`` clauses, and the approval-rate computation
+is inlined directly in the SELECT rather than added as a subsequent
+``.withColumn()`` step.
 """
 
 from __future__ import annotations
@@ -21,10 +29,9 @@ from datetime import date
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from pyspark.sql import DataFrame, SparkSession
-from pyspark.sql import functions as F
-from pyspark.sql.types import DoubleType
 
-from src.utils.io_helpers import read_json_landing, read_seed, write_parquet
+from src.batch.batch_queries_sql import MCC_SPENDING_SQL, MERCHANT_SUMMARY_SQL
+from src.utils.io_helpers import read_json_landing, write_parquet
 from src.utils.logging_config import configure_logging, get_logger
 from src.utils.spark_session import get_spark_session
 
@@ -45,50 +52,13 @@ def compute_mcc_spending(spark: SparkSession, processing_date: str) -> DataFrame
         ISO date string.
     """
     raw = read_json_landing(spark, "transactions", date=processing_date)
-    merchants = read_seed(spark, "merchants.csv")
-
-    # Broadcast join — merchants.csv is small (< 5 k rows)
-    enriched = raw.join(
-        F.broadcast(merchants.select("merchant_id", "merchant_category_code", "merchant_name")),
-        on="merchant_id",
-        how="left",
-    )
-
-    # Use coalesce to handle records that didn't match the dimension table
-    enriched = enriched.withColumn(
-        "mcc",
-        F.coalesce(
-            F.col("merchants.merchant_category_code"),
-            F.col("transactions.merchant_category_code"),
+    raw.createOrReplaceTempView("_mcc_spending_txns")
+    return spark.sql(
+        MCC_SPENDING_SQL.format(
+            view_name="_mcc_spending_txns",
+            processing_date=processing_date,
         )
-        if "merchants.merchant_category_code" in enriched.columns
-        else F.col("merchant_category_code"),
     )
-
-    mcc_agg = (
-        raw.filter(F.col("transaction_type").isin("purchase", "p2p"))
-        .groupBy("merchant_category_code", "currency")
-        .agg(
-            F.count("*").alias("txn_count"),
-            F.sum(F.abs(F.col("amount").cast(DoubleType()))).alias("total_spend"),
-            F.avg(F.abs(F.col("amount").cast(DoubleType()))).alias("avg_txn_amount"),
-            F.max(F.abs(F.col("amount").cast(DoubleType()))).alias("max_txn_amount"),
-            F.countDistinct("merchant_id").alias("active_merchant_count"),
-            F.countDistinct("card_hash").alias("unique_cards"),
-            # Approval rate: approved (response_code == '00') / total
-            F.sum(
-                F.when(F.col("response_code") == "00", 1).otherwise(0)
-            ).alias("approved_count"),
-        )
-        .withColumn(
-            "approval_rate",
-            F.round(F.col("approved_count") / F.col("txn_count"), 4),
-        )
-        .withColumn("processing_date", F.lit(processing_date))
-        .drop("approved_count")
-    )
-
-    return mcc_agg
 
 
 def compute_merchant_summary(spark: SparkSession, processing_date: str) -> DataFrame:
@@ -98,38 +68,12 @@ def compute_merchant_summary(spark: SparkSession, processing_date: str) -> DataF
     in transaction patterns (possible terminal compromise).
     """
     raw = read_json_landing(spark, "transactions", date=processing_date)
-
-    return (
-        raw.groupBy("merchant_id")
-        .agg(
-            F.count("*").alias("total_txns"),
-            F.sum(
-                F.when(F.col("transaction_type") == "purchase", 1).otherwise(0)
-            ).alias("purchase_count"),
-            F.sum(
-                F.when(F.col("transaction_type") == "refund", 1).otherwise(0)
-            ).alias("refund_count"),
-            F.sum(
-                F.when(F.col("transaction_type") == "chargeback", 1).otherwise(0)
-            ).alias("chargeback_count"),
-            F.sum(
-                F.when(
-                    F.col("transaction_type") == "purchase",
-                    F.abs(F.col("amount").cast(DoubleType())),
-                ).otherwise(0.0)
-            ).alias("purchase_volume"),
-            F.sum(
-                F.when(F.col("response_code") == "00", 1).otherwise(0)
-            ).alias("approved_count"),
-            F.countDistinct("card_hash").alias("unique_cards"),
-            F.first("merchant_category_code").alias("merchant_category_code"),
+    raw.createOrReplaceTempView("_merchant_summary_txns")
+    return spark.sql(
+        MERCHANT_SUMMARY_SQL.format(
+            view_name="_merchant_summary_txns",
+            processing_date=processing_date,
         )
-        .withColumn(
-            "approval_rate",
-            F.round(F.col("approved_count") / F.col("total_txns"), 4),
-        )
-        .withColumn("processing_date", F.lit(processing_date))
-        .drop("approved_count")
     )
 
 

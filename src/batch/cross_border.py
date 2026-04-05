@@ -12,6 +12,13 @@ spark-submit::
     spark-submit \\
       --master spark://spark-master:7077 \\
       src/batch/cross_border.py --date 2024-01-15
+
+SQL implementation
+------------------
+The issuer broadcast join, ``COALESCE`` fallback for unknown issuers, and
+corridor aggregation are expressed as a single CTE query
+(``CORRIDOR_VOLUME_SQL``).  The SQL broadcast hint (``/*+ BROADCAST(...) */``)
+replaces the DataFrame API ``F.broadcast()`` wrapper.
 """
 
 from __future__ import annotations
@@ -24,9 +31,8 @@ from datetime import date
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from pyspark.sql import DataFrame, SparkSession
-from pyspark.sql import functions as F
-from pyspark.sql.types import DoubleType
 
+from src.batch.batch_queries_sql import CORRIDOR_VOLUME_SQL
 from src.utils.io_helpers import read_json_landing, read_seed, write_parquet
 from src.utils.logging_config import configure_logging, get_logger
 from src.utils.spark_session import get_spark_session
@@ -55,58 +61,27 @@ def compute_corridor_volume(spark: SparkSession, processing_date: str) -> DataFr
     -------
     DataFrame with columns:
         issuer_country, merchant_country, corridor,
-        txn_count, total_value_usd_equiv,
-        avg_amount, processing_date
+        txn_count, total_value, avg_amount,
+        unique_cards, unique_merchants, processing_date
     """
     raw = read_json_landing(spark, "transactions", date=processing_date)
     issuers = read_seed(spark, "issuers.csv")
-    countries = read_seed(spark, "country_codes.csv")
 
     # Only cross-border transactions are relevant for corridor analysis
-    xborder = raw.filter(F.col("is_cross_border") == True)
-
-    # Broadcast issuers (small dimension) — avoids shuffle on a large raw dataset
-    issuer_enriched = xborder.join(
-        F.broadcast(issuers.select("issuer_id", "country_code").withColumnRenamed(
-            "country_code", "issuer_country"
-        )),
-        on="issuer_id",
-        how="left",
-    ).withColumn(
-        "issuer_country",
-        F.coalesce(F.col("issuer_country"), F.col("country_code")),
+    raw.filter(raw["is_cross_border"] == True).createOrReplaceTempView(
+        "_corridor_txns"
+    )
+    issuers.select("issuer_id", "country_code").createOrReplaceTempView(
+        "_corridor_issuers"
     )
 
-    # Broadcast country names for readable output
-    country_names = countries.select(
-        F.col("country_code").alias("cc"),
-        F.col("country_name"),
+    return spark.sql(
+        CORRIDOR_VOLUME_SQL.format(
+            view_name="_corridor_txns",
+            issuers_view="_corridor_issuers",
+            processing_date=processing_date,
+        )
     )
-
-    corridor_agg = (
-        issuer_enriched
-        .filter(F.col("transaction_type").isin("purchase", "p2p"))
-        .groupBy(
-            F.col("issuer_country"),
-            F.col("country_code").alias("merchant_country"),
-            F.col("currency"),
-        )
-        .agg(
-            F.count("*").alias("txn_count"),
-            F.sum(F.abs(F.col("amount").cast(DoubleType()))).alias("total_value"),
-            F.avg(F.abs(F.col("amount").cast(DoubleType()))).alias("avg_amount"),
-            F.countDistinct("card_hash").alias("unique_cards"),
-            F.countDistinct("merchant_id").alias("unique_merchants"),
-        )
-        # Readable corridor label: "US→GB"
-        .withColumn(
-            "corridor",
-            F.concat(F.col("issuer_country"), F.lit("→"), F.col("merchant_country")),
-        )
-        .withColumn("processing_date", F.lit(processing_date))
-    )
-
-    return corridor_agg
 
 
 def run(spark: SparkSession, processing_date: str) -> None:

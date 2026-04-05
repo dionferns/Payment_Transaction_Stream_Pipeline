@@ -10,6 +10,14 @@ spark-submit::
     spark-submit \\
       --master spark://spark-master:7077 \\
       src/batch/chargeback_analysis.py --date 2024-01-15 --threshold 0.02
+
+SQL implementation
+------------------
+The original two separate groupBy steps (purchases, chargebacks) followed by
+a left join and then a second broadcast join for merchant enrichment are
+replaced by a single CTE query (``CHARGEBACK_RATIOS_SQL``).  The conditional
+aggregation, ratio calculations, ``is_flagged`` flag, and merchant broadcast
+join are all expressed inside the SQL.
 """
 
 from __future__ import annotations
@@ -22,9 +30,8 @@ from datetime import date
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from pyspark.sql import DataFrame, SparkSession
-from pyspark.sql import functions as F
-from pyspark.sql.types import DoubleType
 
+from src.batch.batch_queries_sql import CHARGEBACK_RATIOS_SQL
 from src.utils.io_helpers import read_json_landing, read_seed, write_parquet
 from src.utils.logging_config import configure_logging, get_logger
 from src.utils.spark_session import get_spark_session
@@ -36,7 +43,7 @@ def compute_chargeback_ratios(spark: SparkSession, processing_date: str) -> Data
     """Compute per-merchant chargeback ratios for ``processing_date``.
 
     Returns a DataFrame with one row per merchant that had at least one
-    transaction on the processing date, including:
+    purchase on the processing date, including:
       - Raw purchase and chargeback counts and volumes
       - Chargeback ratio (by count and by value)
       - A boolean ``is_flagged`` column (ratio > threshold)
@@ -52,59 +59,19 @@ def compute_chargeback_ratios(spark: SparkSession, processing_date: str) -> Data
     merchants = read_seed(spark, "merchants.csv")
     threshold = float(os.getenv("CHARGEBACK_RATIO_THRESHOLD", "0.02"))
 
-    purchases = (
-        raw.filter(F.col("transaction_type") == "purchase")
-        .groupBy("merchant_id")
-        .agg(
-            F.count("*").alias("purchase_count"),
-            F.sum(F.abs(F.col("amount").cast(DoubleType()))).alias("purchase_volume"),
+    raw.createOrReplaceTempView("_chargeback_txns")
+    merchants.select(
+        "merchant_id", "merchant_name", "merchant_category_code"
+    ).createOrReplaceTempView("_chargeback_merchants")
+
+    return spark.sql(
+        CHARGEBACK_RATIOS_SQL.format(
+            view_name="_chargeback_txns",
+            merchants_view="_chargeback_merchants",
+            threshold=threshold,
+            processing_date=processing_date,
         )
     )
-
-    chargebacks = (
-        raw.filter(F.col("transaction_type") == "chargeback")
-        .groupBy("merchant_id")
-        .agg(
-            F.count("*").alias("chargeback_count"),
-            F.sum(F.abs(F.col("amount").cast(DoubleType()))).alias("chargeback_volume"),
-        )
-    )
-
-    # Left join so merchants with zero chargebacks still appear
-    ratio_df = (
-        purchases
-        .join(chargebacks, "merchant_id", "left")
-        .na.fill({"chargeback_count": 0, "chargeback_volume": 0.0})
-        # Count-based ratio: industry standard for Visa/MC compliance monitoring
-        .withColumn(
-            "chargeback_ratio_count",
-            F.round(F.col("chargeback_count") / F.col("purchase_count"), 6),
-        )
-        # Value-based ratio: used as a secondary indicator
-        .withColumn(
-            "chargeback_ratio_value",
-            F.round(
-                F.col("chargeback_volume")
-                / (F.col("purchase_volume") + F.col("chargeback_volume")),
-                6,
-            ),
-        )
-        .withColumn(
-            "is_flagged",
-            F.col("chargeback_ratio_count") > threshold,
-        )
-        .withColumn("threshold_applied", F.lit(threshold))
-        .withColumn("processing_date", F.lit(processing_date))
-    )
-
-    # Enrich with merchant name via broadcast join
-    enriched = ratio_df.join(
-        F.broadcast(merchants.select("merchant_id", "merchant_name", "merchant_category_code")),
-        "merchant_id",
-        "left",
-    )
-
-    return enriched
 
 
 def run(spark: SparkSession, processing_date: str, threshold: float) -> None:
@@ -112,7 +79,7 @@ def run(spark: SparkSession, processing_date: str, threshold: float) -> None:
     logger.info("chargeback_analysis_start", date=processing_date, threshold=threshold)
 
     df = compute_chargeback_ratios(spark, processing_date)
-    flagged_count = df.filter(F.col("is_flagged")).count()
+    flagged_count = df.filter(df["is_flagged"]).count()
 
     write_parquet(
         df, "analytics", "chargeback_ratios",

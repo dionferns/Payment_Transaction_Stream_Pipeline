@@ -12,10 +12,40 @@ from typing import Any
 
 
 # ---------------------------------------------------------------------------
+# S3A / MinIO configuration (only active when S3_ENDPOINT is set)
+#
+# When S3_ENDPOINT is set in the environment, Spark will read and write all
+# s3a:// paths to that endpoint — MinIO locally, AWS S3 / GCS in production.
+# path.style.access must be true for MinIO (it does not support virtual-hosted
+# bucket URLs).  The hadoop-aws and aws-java-sdk-bundle JARs are downloaded
+# automatically on first run and cached for subsequent runs.
+#
+# When S3_ENDPOINT is not set (local file mode), this block is empty and the
+# JARs are never downloaded, keeping local development fast.
+# ---------------------------------------------------------------------------
+
+_s3a_conf: dict[str, Any] = {}
+if os.getenv("S3_ENDPOINT"):
+    _s3a_conf = {
+        "spark.hadoop.fs.s3a.endpoint":          os.getenv("S3_ENDPOINT"),
+        "spark.hadoop.fs.s3a.access.key":        os.getenv("S3_ACCESS_KEY", "minioadmin"),
+        "spark.hadoop.fs.s3a.secret.key":        os.getenv("S3_SECRET_KEY", "minioadmin"),
+        "spark.hadoop.fs.s3a.path.style.access": "true",
+        "spark.hadoop.fs.s3a.impl":              "org.apache.hadoop.fs.s3a.S3AFileSystem",
+        # JARs required for S3A — version must match the Hadoop bundled with PySpark 3.5
+        "spark.jars.packages": (
+            "org.apache.hadoop:hadoop-aws:3.3.4,"
+            "com.amazonaws:aws-java-sdk-bundle:1.12.262"
+        ),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Baseline configuration shared across all jobs
 # ---------------------------------------------------------------------------
 
 BASE_SPARK_CONF: dict[str, Any] = {
+    **_s3a_conf,
     # ---- Serialisation --------------------------------------------------------
     # Kryo is faster and more compact than Java serialisation for Spark internals.
     "spark.serializer": "org.apache.spark.serializer.KryoSerializer",

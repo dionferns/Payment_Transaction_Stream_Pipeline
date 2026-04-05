@@ -267,7 +267,7 @@ class TransactionGenerator:
         return hashlib.sha256(pan.encode()).hexdigest()
 
     @staticmethod
-    def _sample_amount(mcc: str, txn_type: str) -> Decimal:
+    def _sample_amount(mcc: str, txn_type: str) -> Decimal: 
         mean, std = MCC_AMOUNT_PARAMS.get(mcc, (50.0, 25.0))
         raw = max(0.01, np.random.normal(mean, std))
         # Round to 2 decimal places

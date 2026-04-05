@@ -11,6 +11,14 @@ spark-submit::
     spark-submit \\
       --master spark://spark-master:7077 \\
       src/batch/daily_settlement.py --date 2024-01-15
+
+SQL implementation
+------------------
+The original three-way groupBy + full-outer-join approach is replaced by a
+single conditional aggregation query (``SETTLEMENT_SQL``).  One GROUP BY pass
+over the transactions computes purchase, refund, and chargeback subtotals
+simultaneously; the final SELECT joins in the dimension views for acquirer and
+issuer validation using SQL broadcast hints.
 """
 
 from __future__ import annotations
@@ -23,11 +31,9 @@ from datetime import date
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from pyspark.sql import DataFrame, SparkSession
-from pyspark.sql import functions as F
-from pyspark.sql.types import DoubleType
 
+from src.batch.batch_queries_sql import SETTLEMENT_SQL
 from src.utils.io_helpers import (
-    analytics_zone_path,
     read_json_landing,
     read_seed,
     write_parquet,
@@ -64,43 +70,21 @@ def compute_daily_settlement(spark: SparkSession, processing_date: str) -> DataF
         net_settlement_amount, processing_date
     """
     raw = read_json_landing(spark, "transactions", date=processing_date)
-
-    # Broadcast small dimension tables — avoids a shuffle-merge join
     acquirers = read_seed(spark, "acquirers.csv")
     issuers = read_seed(spark, "issuers.csv")
 
-    purchases = raw.filter(F.col("transaction_type") == "purchase")
-    refunds   = raw.filter(F.col("transaction_type") == "refund")
-    chargebacks = raw.filter(F.col("transaction_type") == "chargeback")
+    raw.createOrReplaceTempView("_settlement_txns")
+    acquirers.createOrReplaceTempView("_settlement_acquirers")
+    issuers.createOrReplaceTempView("_settlement_issuers")
 
-    def _agg(df: DataFrame, prefix: str) -> DataFrame:
-        return df.groupBy("acquirer_id", "issuer_id", "currency").agg(
-            F.count("*").alias(f"{prefix}_count"),
-            F.sum(F.abs(F.col("amount").cast(DoubleType()))).alias(f"{prefix}_volume"),
+    return spark.sql(
+        SETTLEMENT_SQL.format(
+            view_name="_settlement_txns",
+            acquirers_view="_settlement_acquirers",
+            issuers_view="_settlement_issuers",
+            processing_date=processing_date,
         )
-
-    purch_agg = _agg(purchases, "purchase")
-    refund_agg = _agg(refunds, "refund")
-    cb_agg = _agg(chargebacks, "chargeback")
-
-    # Full outer join so pairs with only one txn type still appear
-    settlement = (
-        purch_agg
-        .join(refund_agg, ["acquirer_id", "issuer_id", "currency"], "full")
-        .join(cb_agg,    ["acquirer_id", "issuer_id", "currency"], "full")
-        .na.fill(0)
-        # Net = purchases - refunds - chargebacks (chargebacks debit the acquirer)
-        .withColumn(
-            "net_settlement_amount",
-            F.col("purchase_volume") - F.col("refund_volume") - F.col("chargeback_volume"),
-        )
-        .withColumn("processing_date", F.lit(processing_date))
-        # Validate dimension membership via broadcast joins
-        .join(F.broadcast(acquirers.select("acquirer_id")), "acquirer_id", "left")
-        .join(F.broadcast(issuers.select("issuer_id")), "issuer_id", "left")
     )
-
-    return settlement
 
 
 def run(spark: SparkSession, processing_date: str) -> None:

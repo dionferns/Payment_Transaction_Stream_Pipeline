@@ -3,13 +3,26 @@ Windowed aggregation logic for the streaming layer.
 
 All aggregations use Spark's built-in window functions rather than UDFs to
 keep execution on the JVM and avoid Python serialisation overhead.
+
+SQL implementation
+------------------
+All three aggregations are now expressed as Spark SQL queries (see
+``aggregations_sql.py``).  Watermarks are still applied via the DataFrame API
+before the temporary view is registered — this is necessary because watermark
+semantics are a streaming property that cannot be set inside a SQL string.
+Each function then executes the corresponding SQL template and returns the
+result DataFrame with an identical output schema to the original implementation.
 """
 
 from __future__ import annotations
 
 from pyspark.sql import DataFrame
-from pyspark.sql import functions as F
-from pyspark.sql.types import DoubleType
+
+from src.streaming.aggregations_sql import (
+    CARD_DAILY_SQL,
+    ISSUER_XBORDER_SQL,
+    MERCHANT_VOLUME_SQL,
+)
 
 
 def merchant_volume_5min(df: DataFrame) -> DataFrame:
@@ -26,26 +39,11 @@ def merchant_volume_5min(df: DataFrame) -> DataFrame:
         Streaming DataFrame with at least ``merchant_id``, ``amount``,
         ``timestamp`` (TimestampType) columns.
     """
-    return (
-        df.filter(F.col("transaction_type").isin("purchase", "p2p"))
-        .withWatermark("timestamp", "10 minutes")
-        .groupBy(
-            F.window(F.col("timestamp"), "5 minutes"),
-            F.col("merchant_id"),
-        )
-        .agg(
-            F.count("*").alias("txn_count"),
-            F.sum(F.abs(F.col("amount").cast(DoubleType()))).alias("total_value"),
-            F.countDistinct("card_hash").alias("unique_cards"),
-        )
-        .select(
-            F.col("window.start").alias("window_start"),
-            F.col("window.end").alias("window_end"),
-            "merchant_id",
-            "txn_count",
-            "total_value",
-            "unique_cards",
-        )
+    df.withWatermark("timestamp", "10 minutes").createOrReplaceTempView(
+        "_merchant_volume_input"
+    )
+    return df.sparkSession.sql(
+        MERCHANT_VOLUME_SQL.format(view_name="_merchant_volume_input")
     )
 
 
@@ -59,31 +57,11 @@ def issuer_cross_border_ratio_1h(df: DataFrame) -> DataFrame:
 
     A high ratio can indicate compromised cards being used abroad.
     """
-    return (
-        df.withWatermark("timestamp", "15 minutes")
-        .groupBy(
-            F.window(F.col("timestamp"), "1 hour", "15 minutes"),
-            F.col("issuer_id"),
-        )
-        .agg(
-            F.count("*").alias("total_txns"),
-            F.sum(F.col("is_cross_border").cast("int")).alias("cross_border_txns"),
-        )
-        .withColumn(
-            "cross_border_ratio",
-            F.round(
-                F.col("cross_border_txns") / F.col("total_txns"),
-                4,
-            ),
-        )
-        .select(
-            F.col("window.start").alias("window_start"),
-            F.col("window.end").alias("window_end"),
-            "issuer_id",
-            "total_txns",
-            "cross_border_txns",
-            "cross_border_ratio",
-        )
+    df.withWatermark("timestamp", "15 minutes").createOrReplaceTempView(
+        "_issuer_xborder_input"
+    )
+    return df.sparkSession.sql(
+        ISSUER_XBORDER_SQL.format(view_name="_issuer_xborder_input")
     )
 
 
@@ -95,14 +73,9 @@ def card_daily_running_total(df: DataFrame) -> DataFrame:
     using ``date``-level partitioning; for exact running totals use a
     stateful foreachBatch with a persistent key-value store.
     """
-    return (
-        df.filter(F.col("transaction_type").isin("purchase", "p2p"))
-        .withColumn("date", F.to_date(F.col("timestamp")))
-        .withWatermark("timestamp", "10 minutes")
-        .groupBy("card_hash", "date")
-        .agg(
-            F.count("*").alias("daily_txn_count"),
-            F.sum(F.abs(F.col("amount").cast(DoubleType()))).alias("daily_spend"),
-            F.max("timestamp").alias("last_seen"),
-        )
+    df.withWatermark("timestamp", "10 minutes").createOrReplaceTempView(
+        "_card_daily_input"
+    )
+    return df.sparkSession.sql(
+        CARD_DAILY_SQL.format(view_name="_card_daily_input")
     )

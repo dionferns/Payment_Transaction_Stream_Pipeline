@@ -1,0 +1,11 @@
+# Kafka Connect with the Confluent S3 Sink Connector pre-installed.
+#
+# Pre-installing at build time means no internet download when the container
+# starts — important for repeatable local development and CI environments.
+#
+# The S3 Sink Connector writes Kafka messages to any S3-compatible object store
+# (MinIO locally, AWS S3 / GCS in production).
+
+FROM confluentinc/cp-kafka-connect:7.6.0
+
+RUN confluent-hub install --no-prompt confluentinc/kafka-connect-s3:10.5.7

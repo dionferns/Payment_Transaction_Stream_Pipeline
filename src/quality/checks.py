@@ -10,6 +10,13 @@ checks fail.
 Adding a new check:
   1. Define a function with signature ``(df: DataFrame, **kwargs) -> CheckResult``.
   2. Register it in ``ALL_CHECKS`` at the bottom of this module.
+
+SQL implementation
+------------------
+Three checks have been rewritten to use Spark SQL (see ``checks_sql.py``):
+  - ``check_nulls``         — one scan replaces N separate ``.count()`` actions
+  - ``check_duplicates``    — one scan replaces two ``.count()`` actions
+  - ``check_amount_ranges`` — one scan replaces a per-type loop of ``.count()`` actions
 """
 
 from __future__ import annotations
@@ -21,6 +28,12 @@ from typing import Any, Optional
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 from pyspark.sql.types import DecimalType, StringType, TimestampType
+
+from src.quality.checks_sql import (
+    AMOUNT_RANGES_CHECK_SQL,
+    DUPLICATES_CHECK_SQL,
+    NULLS_CHECK_SQL,
+)
 
 
 @dataclass
@@ -104,15 +117,39 @@ def check_nulls(
     required_columns: Optional[list[str]] = None,
     **kwargs: Any,
 ) -> CheckResult:
-    """Fail if any required column contains NULL values."""
+    """Fail if any required column contains NULL values.
+
+    Executes a single SQL scan that counts NULLs across all required columns
+    simultaneously, replacing the original per-column ``.count()`` loop.
+    """
     cols = required_columns or REQUIRED_NON_NULL
     present_cols = [c for c in cols if c in df.columns]
 
-    null_counts: dict[str, int] = {}
-    for col in present_cols:
-        cnt = df.filter(F.col(col).isNull()).count()
-        if cnt > 0:
-            null_counts[col] = cnt
+    if not present_cols:
+        return CheckResult(
+            check_name="null_check",
+            status="WARN",
+            message="No required columns present in DataFrame — check skipped",
+        )
+
+    # Build one CASE WHEN expression per column: single scan for all null counts
+    null_exprs = ", ".join(
+        f"COUNT(CASE WHEN {col} IS NULL THEN 1 END) AS null_count_{col}"
+        for col in present_cols
+    )
+    df.createOrReplaceTempView("_nulls_check_input")
+    row = df.sparkSession.sql(
+        NULLS_CHECK_SQL.format(
+            view_name="_nulls_check_input",
+            null_count_exprs=null_exprs,
+        )
+    ).collect()[0]
+
+    null_counts = {
+        col: row[f"null_count_{col}"]
+        for col in present_cols
+        if row[f"null_count_{col}"] > 0
+    }
 
     if null_counts:
         return CheckResult(
@@ -184,24 +221,30 @@ AMOUNT_RULES: dict[str, tuple[float, float]] = {
 
 
 def check_amount_ranges(df: DataFrame, **kwargs: Any) -> CheckResult:
-    """Validate that amounts conform to per-type sign and magnitude rules."""
-    violations = 0
-    details: dict[str, int] = {}
+    """Validate that amounts conform to per-type sign and magnitude rules.
 
-    for txn_type, (min_val, max_val) in AMOUNT_RULES.items():
-        if "transaction_type" not in df.columns or "amount" not in df.columns:
-            break
-        cnt = (
-            df.filter(F.col("transaction_type") == txn_type)
-            .filter(
-                (F.col("amount").cast("double") < min_val)
-                | (F.col("amount").cast("double") > max_val)
-            )
-            .count()
+    Executes a single SQL scan with conditional aggregation across all four
+    transaction types simultaneously, replacing the original per-type
+    ``.count()`` loop.
+    """
+    if "transaction_type" not in df.columns or "amount" not in df.columns:
+        return CheckResult(
+            check_name="amount_range",
+            status="WARN",
+            message="Required columns not present — check skipped",
         )
-        if cnt > 0:
-            violations += cnt
-            details[txn_type] = cnt
+
+    df.createOrReplaceTempView("_amount_ranges_check_input")
+    row = df.sparkSession.sql(
+        AMOUNT_RANGES_CHECK_SQL.format(view_name="_amount_ranges_check_input")
+    ).collect()[0]
+
+    details = {
+        txn_type: row[f"{txn_type}_violations"]
+        for txn_type in ("purchase", "refund", "chargeback", "p2p")
+        if row[f"{txn_type}_violations"] > 0
+    }
+    violations = sum(details.values())
 
     if violations:
         return CheckResult(
@@ -222,16 +265,26 @@ def check_amount_ranges(df: DataFrame, **kwargs: Any) -> CheckResult:
 # ---------------------------------------------------------------------------
 
 def check_duplicates(df: DataFrame, **kwargs: Any) -> CheckResult:
-    """Fail if ``transaction_id`` is not unique in this batch."""
+    """Fail if ``transaction_id`` is not unique in this batch.
+
+    Executes a single SQL scan that computes total, distinct, and duplicate
+    counts in one pass, replacing the original two separate ``.count()`` calls.
+    """
     if "transaction_id" not in df.columns:
         return CheckResult(
             check_name="duplicate_check",
             status="WARN",
             message="transaction_id column not present — check skipped",
         )
-    total = df.count()
-    distinct = df.select("transaction_id").distinct().count()
-    duplicates = total - distinct
+
+    df.createOrReplaceTempView("_duplicates_check_input")
+    row = df.sparkSession.sql(
+        DUPLICATES_CHECK_SQL.format(view_name="_duplicates_check_input")
+    ).collect()[0]
+
+    total = row["total_count"]
+    distinct = row["unique_count"]
+    duplicates = row["duplicate_count"]
 
     if duplicates > 0:
         return CheckResult(

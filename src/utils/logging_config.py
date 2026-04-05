@@ -14,6 +14,15 @@ import sys
 
 import structlog
 
+# Group 4 — "How does real-time fraud detection work?"
+# Purpose: The most interesting part of the project.
+
+# src/streaming/fraud_rules.py — Three fraud detection rules:
+# Velocity: Card used more than 5 times in 60 seconds? Flag it.
+# Amount Anomaly: Transaction 3x higher than that card's average? Flag it.
+# Geo-Impossibility: Same card used in two different countries within 30 minutes? Flag it.
+# src/streaming/aggregations.py — Real-time summaries: how much is each merchant processing right now? What % of a bank's transactions are crossing borders?
+# src/streaming/stream_processor.py — The conductor. Starts Spark, reads incoming data, runs the fraud rules and aggregations simultaneously, writes results to files.
 
 def configure_logging() -> None:
     """Configure structlog with processors appropriate for the current env.

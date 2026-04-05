@@ -16,8 +16,8 @@ import yaml
 class GeneratorConfig:
     """Runtime parameters for the transaction generator."""
 
-    tps: int = 1000
-    duration_seconds: int = 3600
+    tps: int = 100
+    duration_seconds: int = 60
     batch_size: int = 500
     output_mode: str = "file"   # "file" | "kafka"
     timezone: str = "UTC"
@@ -71,9 +71,9 @@ def load_config(config_path: Optional[str] = None) -> GeneratorConfig:
     gen = raw.get("generator", {})
 
     cfg = GeneratorConfig(
-        tps=int(os.getenv("GENERATOR_TPS", gen.get("tps", 1000))),
+        tps=int(os.getenv("GENERATOR_TPS", gen.get("tps", 100))),
         duration_seconds=int(
-            os.getenv("GENERATOR_DURATION_SECONDS", gen.get("duration_seconds", 3600))
+            os.getenv("GENERATOR_DURATION_SECONDS", gen.get("duration_seconds", 60))
         ),
         batch_size=int(
             os.getenv("GENERATOR_BATCH_SIZE", gen.get("batch_size", 500))

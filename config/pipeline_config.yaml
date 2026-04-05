@@ -79,8 +79,8 @@ data_quality:
       max: 10000.00
 
 generator:
-  tps: ${GENERATOR_TPS:-1000}
-  duration_seconds: ${GENERATOR_DURATION_SECONDS:-3600}
+  tps: ${GENERATOR_TPS:-100}
+  duration_seconds: ${GENERATOR_DURATION_SECONDS:-60}
   batch_size: ${GENERATOR_BATCH_SIZE:-500}
   output_mode: ${GENERATOR_OUTPUT_MODE:-file}   # file | kafka
   # Timezone for generated timestamps
